@@ -582,7 +582,15 @@ export default function App() {
 
     return (
         <div className="container">
-            {status && <div className="status">{status}</div>}
+            {status && (
+                <div className="loading-overlay">
+                    {status.startsWith("오류") ? (
+                        <div className="loading-error">{status}</div>
+                    ) : (
+                        <div className="loading-spinner" />
+                    )}
+                </div>
+            )}
             <video ref={videoRef} className="video" muted playsInline />
             <canvas ref={canvasRef} className="canvas" />
             <canvas ref={threeRef} className="three-canvas" />
