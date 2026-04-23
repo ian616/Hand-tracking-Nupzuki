@@ -159,7 +159,7 @@ export default function App() {
 
         async function init() {
             setStatus("MediaPipe 로딩 중...");
-            const vision = await FilesetResolver.forVisionTasks("/wasm");
+            const vision = await FilesetResolver.forVisionTasks(import.meta.env.BASE_URL + "wasm");
             const handLandmarker = await HandLandmarker.createFromOptions(vision, {
                 baseOptions: {
                     modelAssetPath:
@@ -266,7 +266,7 @@ export default function App() {
         renderer.toneMapping = THREE.AgXToneMapping;
         renderer.toneMappingExposure = 1.5;
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.type = THREE.PCFShadowMap;
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 5, 10000);
@@ -311,7 +311,7 @@ export default function App() {
         const raycaster = new THREE.Raycaster();
 
         new FBXLoader().load(
-            "/Nubzuki_BigEye.fbx",
+            import.meta.env.BASE_URL + "Nubzuki_BigEye.fbx",
             (fbx) => {
                 fbx.traverse((child) => {
                     if (!(child instanceof THREE.Mesh)) return;
@@ -371,15 +371,15 @@ export default function App() {
             (err) => console.error(err),
         );
 
-        const clock = new THREE.Clock();
+        const timer = new THREE.Timer();
         let accumulator = 0;
         const timeStep = 1 / 60;
 
         let animId: number;
         function animate() {
             animId = requestAnimationFrame(animate);
-
-            const delta = clock.getDelta();
+            timer.update();
+            const delta = timer.getDelta();
             accumulator += delta;
 
             if (mixerRef.current) mixerRef.current.update(delta);
