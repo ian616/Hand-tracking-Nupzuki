@@ -433,7 +433,7 @@ export default function App() {
 
                             if (!physics.wasGrabbing) {
                                 const distToRay = Math.sqrt(raycaster.ray.distanceSqToPoint(centerPos));
-                                const GRAB_RADIUS = physics.maxDim * (pinches.length === 2 ? 1.0 : 0.6);
+                                const GRAB_RADIUS = physics.maxDim * 1;
                                 if (distToRay < GRAB_RADIUS) {
                                     physics.initialGrabDist = camera.position.distanceTo(centerPos);
                                     physics.grabDist = physics.initialGrabDist;
@@ -461,9 +461,22 @@ export default function App() {
                                     r1.setFromCamera(new THREE.Vector2(pinches[0].ndc.x, pinches[0].ndc.y), camera);
                                     const r2 = new THREE.Raycaster();
                                     r2.setFromCamera(new THREE.Vector2(pinches[1].ndc.x, pinches[1].ndc.y), camera);
-                                    physics.initialPinchDist = r1.ray
-                                        .at(physics.grabDist, new THREE.Vector3())
-                                        .distanceTo(r2.ray.at(physics.grabDist, new THREE.Vector3()));
+                                    const p1Init = r1.ray.at(physics.grabDist, new THREE.Vector3());
+                                    const p2Init = r2.ray.at(physics.grabDist, new THREE.Vector3());
+                                    physics.initialPinchDist = p1Init.distanceTo(p2Init);
+
+                                    // 잡는 순간 한 번만 stretchWrapper 방향 고정
+                                    const sw = stretchWrapperRef.current;
+                                    if (sw) {
+                                        const worldAxis = new THREE.Vector3().subVectors(p2Init, p1Init).normalize();
+                                        const localAxis = worldAxis.applyQuaternion(model.quaternion.clone().invert());
+                                        sw.quaternion.copy(
+                                            new THREE.Quaternion().setFromUnitVectors(
+                                                new THREE.Vector3(1, 0, 0),
+                                                localAxis,
+                                            ),
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -524,20 +537,6 @@ export default function App() {
                             if (physics.initialPinchDist > 0) {
                                 const ratio = p1.distanceTo(p2) / physics.initialPinchDist;
                                 physics.targetScale = THREE.MathUtils.clamp(ratio, 0.5, 3.0);
-                            }
-
-                            // stretchWrapper를 현재 당기는 방향(currentVec)으로 정렬
-                            const sw = stretchWrapperRef.current;
-                            if (sw) {
-                                const localAxis = currentVec.clone()
-                                    .applyQuaternion(model.quaternion.clone().invert())
-                                    .normalize();
-                                sw.quaternion.copy(
-                                    new THREE.Quaternion().setFromUnitVectors(
-                                        new THREE.Vector3(1, 0, 0),
-                                        localAxis,
-                                    ),
-                                );
                             }
 
                             if (!physics.smoothedVec) {
