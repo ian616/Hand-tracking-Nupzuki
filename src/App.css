@@ -81,12 +81,18 @@ body {
   border-radius: 1rem;
 }
 
-.toolbar {
+.bottom-panels {
   position: absolute;
   bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 20;
+  display: flex;
+  align-items: stretch;
+  gap: 2rem;
+}
+
+.toolbar {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -95,7 +101,23 @@ body {
   backdrop-filter: blur(20px) saturate(1.8);
   -webkit-backdrop-filter: blur(20px) saturate(1.8);
   border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 2rem;
+  border-radius: 1.5rem;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1.4rem;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 1.5rem;
   box-shadow:
     0 4px 24px rgba(0, 0, 0, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);
@@ -130,6 +152,72 @@ body {
   height: 2.4rem;
   background: rgba(255, 255, 255, 0.25);
   flex-shrink: 0;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.slider-label {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  min-width: 5.6rem;
+  text-align: right;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+input[type="range"].aesthetic-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 148px;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.78) 0%,
+    rgba(255, 255, 255, 0.78) var(--pct),
+    rgba(255, 255, 255, 0.18) var(--pct),
+    rgba(255, 255, 255, 0.18) 100%
+  );
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+input[type="range"].aesthetic-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.55), 0 0 14px rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+input[type="range"].aesthetic-slider::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9), 0 0 20px rgba(255, 255, 255, 0.45);
+}
+
+input[type="range"].aesthetic-slider::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+}
+
+input[type="range"].aesthetic-slider::-moz-range-track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
 }
 
 .reset-button {

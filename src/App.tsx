@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import "./App.css";
 
-const PINCH_RATIO_THRESHOLD = 0.6;
 
 interface Landmark {
     x: number;
@@ -27,6 +26,7 @@ interface Physics {
     initialPinchDist: number;
     currentScale: number;
     targetScale: number;
+    scaleVel: number;
     wasGrabbing: boolean;
     activePinchesCount: number;
     grabOffset: THREE.Vector3;
@@ -52,10 +52,16 @@ function drawHand(
     const px = (lm: Landmark) => lm.x * w;
     const py = (lm: Landmark) => lm.y * h;
 
-    const glowFaint = pinching ? "rgba(252,211,77,0.25)" : "rgba(255,255,255,0.25)";
+    const glowFaint = pinching
+        ? "rgba(252,211,77,0.25)"
+        : "rgba(255,255,255,0.25)";
     const glowColor = pinching ? "#fcd34d" : "white";
-    const lineColor = pinching ? "rgba(252,211,77,0.9)" : "rgba(255,255,255,0.9)";
-    const dotFaint = pinching ? "rgba(252,211,77,0.15)" : "rgba(255,255,255,0.15)";
+    const lineColor = pinching
+        ? "rgba(252,211,77,0.9)"
+        : "rgba(255,255,255,0.9)";
+    const dotFaint = pinching
+        ? "rgba(252,211,77,0.15)"
+        : "rgba(255,255,255,0.15)";
 
     ctx.save();
     ctx.strokeStyle = glowFaint;
@@ -123,7 +129,14 @@ function drawHand(
         const my = (py(thumb) + py(index)) / 2;
 
         ctx.save();
-        const gradient = ctx.createRadialGradient(mx, my, 0, mx, my, glowRadius);
+        const gradient = ctx.createRadialGradient(
+            mx,
+            my,
+            0,
+            mx,
+            my,
+            glowRadius,
+        );
         gradient.addColorStop(0, "rgba(252,211,77,0.9)");
         gradient.addColorStop(0.3, "rgba(252,211,77,0.5)");
         gradient.addColorStop(1, "rgba(252,211,77,0)");
@@ -154,8 +167,14 @@ export default function App() {
     const mixerRef = useRef<THREE.AnimationMixer | null>(null);
     const actionRef = useRef<THREE.AnimationAction | null>(null);
     const resetRef = useRef<(() => void) | null>(null);
+    const pinchThresholdRef = useRef(0.6);
+    const rotationSpeedRef = useRef(2.0);
+    const stiffnessRef = useRef(0.2);
 
     const [status, setStatus] = useState("초기화 중...");
+    const [pinchThreshold, setPinchThreshold] = useState(0.6);
+    const [rotationSpeed, setRotationSpeed] = useState(2.0);
+    const [stiffness, setStiffness] = useState(0.2);
 
     // ── MediaPipe 핸드트래킹 ─────────────────────────────────────
     useEffect(() => {
@@ -163,16 +182,21 @@ export default function App() {
 
         async function init() {
             setStatus("MediaPipe 로딩 중...");
-            const vision = await FilesetResolver.forVisionTasks(import.meta.env.BASE_URL + "wasm");
-            const handLandmarker = await HandLandmarker.createFromOptions(vision, {
-                baseOptions: {
-                    modelAssetPath:
-                        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-                    delegate: "CPU",
+            const vision = await FilesetResolver.forVisionTasks(
+                import.meta.env.BASE_URL + "wasm",
+            );
+            const handLandmarker = await HandLandmarker.createFromOptions(
+                vision,
+                {
+                    baseOptions: {
+                        modelAssetPath:
+                            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                        delegate: "CPU",
+                    },
+                    runningMode: "VIDEO",
+                    numHands: 2,
                 },
-                runningMode: "VIDEO",
-                numHands: 2,
-            });
+            );
             const connections = HandLandmarker.HAND_CONNECTIONS;
 
             setStatus("카메라 연결 중...");
@@ -202,7 +226,10 @@ export default function App() {
                     const now = performance.now();
                     if (now > lastTimestamp) {
                         lastTimestamp = now;
-                        const results = handLandmarker.detectForVideo(video, now);
+                        const results = handLandmarker.detectForVideo(
+                            video,
+                            now,
+                        );
                         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                         const pinches: Pinch[] = [];
@@ -223,7 +250,8 @@ export default function App() {
                                 thumb.y - index.y,
                                 thumb.z - index.z,
                             );
-                            const isPinching = pinchDist / palmSize < PINCH_RATIO_THRESHOLD;
+                            const isPinching =
+                                pinchDist / palmSize < pinchThresholdRef.current;
 
                             if (isPinching) {
                                 pinches.push({
@@ -235,7 +263,14 @@ export default function App() {
                                 });
                             }
 
-                            drawHand(ctx, lm, connections, canvas.width, canvas.height, isPinching);
+                            drawHand(
+                                ctx,
+                                lm,
+                                connections,
+                                canvas.width,
+                                canvas.height,
+                                isPinching,
+                            );
                         }
 
                         gestureRef.current = { pinches };
@@ -255,7 +290,8 @@ export default function App() {
             running = false;
             cancelAnimationFrame(animRef.current);
             const src = videoRef.current?.srcObject;
-            if (src instanceof MediaStream) src.getTracks().forEach((t) => t.stop());
+            if (src instanceof MediaStream)
+                src.getTracks().forEach((t) => t.stop());
         };
     }, []);
 
@@ -263,7 +299,11 @@ export default function App() {
     useEffect(() => {
         const canvas = threeRef.current!;
 
-        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        const renderer = new THREE.WebGLRenderer({
+            canvas,
+            alpha: true,
+            antialias: true,
+        });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -273,7 +313,12 @@ export default function App() {
         renderer.shadowMap.type = THREE.PCFShadowMap;
 
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 5, 10000);
+        const camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            5,
+            10000,
+        );
 
         const hemi = new THREE.HemisphereLight(0xffffff, 0xffe8f0, 2.5);
         scene.add(hemi);
@@ -306,6 +351,7 @@ export default function App() {
             initialPinchDist: 0,
             currentScale: 1,
             targetScale: 1,
+            scaleVel: 0,
             wasGrabbing: false,
             activePinchesCount: 0,
             grabOffset: new THREE.Vector3(),
@@ -325,7 +371,9 @@ export default function App() {
                     child.castShadow = true;
                     child.receiveShadow = true;
                     const wasArray = Array.isArray(child.material);
-                    const mats = (wasArray ? child.material : [child.material]) as THREE.MeshStandardMaterial[];
+                    const mats = (
+                        wasArray ? child.material : [child.material]
+                    ) as THREE.MeshStandardMaterial[];
                     const newMats = mats.map(
                         (m) =>
                             new THREE.MeshStandardMaterial({
@@ -352,9 +400,13 @@ export default function App() {
                 const center = box.getCenter(new THREE.Vector3());
 
                 fbx.position.sub(center);
+
+                const pivotGroup = new THREE.Group();
+                pivotGroup.add(fbx);
+
                 const stretchWrapper = new THREE.Group();
                 const outerGroup = new THREE.Group();
-                stretchWrapper.add(fbx);
+                stretchWrapper.add(pivotGroup);
                 outerGroup.add(stretchWrapper);
                 scene.add(outerGroup);
                 modelRef.current = outerGroup;
@@ -381,6 +433,7 @@ export default function App() {
                     physics.lastVec = null;
                     physics.currentScale = 1;
                     physics.targetScale = 1;
+                    physics.scaleVel = 0;
                     camera.position.set(0, 0, maxDim * 2);
                     controls.target.set(0, 0, 0);
                     controls.update();
@@ -413,7 +466,10 @@ export default function App() {
                     const centerPos = model.position.clone();
                     centerPos.y += physics.halfHeight;
 
-                    if (pinches.length === 2 && pinches[0].ndc.x > pinches[1].ndc.x) {
+                    if (
+                        pinches.length === 2 &&
+                        pinches[0].ndc.x > pinches[1].ndc.x
+                    ) {
                         pinches = [pinches[1], pinches[0]];
                     }
 
@@ -431,14 +487,20 @@ export default function App() {
 
                         raycaster.setFromCamera(centerNDC, camera);
 
-                        if (!physics.wasGrabbing || physics.activePinchesCount !== pinches.length) {
+                        if (
+                            !physics.wasGrabbing ||
+                            physics.activePinchesCount !== pinches.length
+                        ) {
                             let startGrabbing = false;
 
                             if (!physics.wasGrabbing) {
-                                const distToRay = Math.sqrt(raycaster.ray.distanceSqToPoint(centerPos));
+                                const distToRay = Math.sqrt(
+                                    raycaster.ray.distanceSqToPoint(centerPos),
+                                );
                                 const GRAB_RADIUS = physics.maxDim * 1;
                                 if (distToRay < GRAB_RADIUS) {
-                                    physics.initialGrabDist = camera.position.distanceTo(centerPos);
+                                    physics.initialGrabDist =
+                                        camera.position.distanceTo(centerPos);
                                     physics.grabDist = physics.initialGrabDist;
                                     startGrabbing = true;
                                 }
@@ -449,37 +511,75 @@ export default function App() {
 
                             if (startGrabbing) {
                                 if (!physics.wasGrabbing && actionRef.current) {
-                                    actionRef.current.reset().fadeIn(0.2).play();
+                                    actionRef.current
+                                        .reset()
+                                        .fadeIn(0.2)
+                                        .play();
                                 }
                                 physics.initialPalmSize = pinches[0].palmSize;
                                 physics.wasGrabbing = true;
                                 physics.activePinchesCount = pinches.length;
                                 const grabPoint = raycaster.ray.origin
                                     .clone()
-                                    .addScaledVector(raycaster.ray.direction, physics.grabDist);
-                                physics.grabOffset.subVectors(model.position, grabPoint);
+                                    .addScaledVector(
+                                        raycaster.ray.direction,
+                                        physics.grabDist,
+                                    );
+                                physics.grabOffset.subVectors(
+                                    model.position,
+                                    grabPoint,
+                                );
 
                                 if (pinches.length === 2) {
                                     const r1 = new THREE.Raycaster();
-                                    r1.setFromCamera(new THREE.Vector2(pinches[0].ndc.x, pinches[0].ndc.y), camera);
+                                    r1.setFromCamera(
+                                        new THREE.Vector2(
+                                            pinches[0].ndc.x,
+                                            pinches[0].ndc.y,
+                                        ),
+                                        camera,
+                                    );
                                     const r2 = new THREE.Raycaster();
-                                    r2.setFromCamera(new THREE.Vector2(pinches[1].ndc.x, pinches[1].ndc.y), camera);
-                                    const p1Init = r1.ray.at(physics.grabDist, new THREE.Vector3());
-                                    const p2Init = r2.ray.at(physics.grabDist, new THREE.Vector3());
-                                    physics.initialPinchDist = p1Init.distanceTo(p2Init);
+                                    r2.setFromCamera(
+                                        new THREE.Vector2(
+                                            pinches[1].ndc.x,
+                                            pinches[1].ndc.y,
+                                        ),
+                                        camera,
+                                    );
+                                    const p1Init = r1.ray.at(
+                                        physics.grabDist,
+                                        new THREE.Vector3(),
+                                    );
+                                    const p2Init = r2.ray.at(
+                                        physics.grabDist,
+                                        new THREE.Vector3(),
+                                    );
+                                    physics.initialPinchDist =
+                                        p1Init.distanceTo(p2Init);
 
                                     // 잡는 순간 한 번만 stretchWrapper 방향 고정
                                     const sw = stretchWrapperRef.current;
                                     if (sw) {
-                                        const worldAxis = new THREE.Vector3().subVectors(p2Init, p1Init).normalize();
-                                        const localAxis = worldAxis.applyQuaternion(model.quaternion.clone().invert());
-                                        const stretchQuat = new THREE.Quaternion().setFromUnitVectors(
-                                            new THREE.Vector3(1, 0, 0),
-                                            localAxis,
-                                        );
+                                        const worldAxis = new THREE.Vector3()
+                                            .subVectors(p2Init, p1Init)
+                                            .normalize();
+                                        const localAxis =
+                                            worldAxis.applyQuaternion(
+                                                model.quaternion
+                                                    .clone()
+                                                    .invert(),
+                                            );
+                                        const stretchQuat =
+                                            new THREE.Quaternion().setFromUnitVectors(
+                                                new THREE.Vector3(1, 0, 0),
+                                                localAxis,
+                                            );
                                         sw.quaternion.copy(stretchQuat);
                                         if (sw.children.length > 0) {
-                                            sw.children[0].quaternion.copy(stretchQuat.clone().invert());
+                                            sw.children[0].quaternion.copy(
+                                                stretchQuat.clone().invert(),
+                                            );
                                         }
                                     }
                                 }
@@ -502,12 +602,23 @@ export default function App() {
                         if (pinches.length === 1) {
                             centerNDC.set(pinches[0].ndc.x, pinches[0].ndc.y);
 
-                            const depthRatio = physics.initialPalmSize / pinches[0].palmSize;
-                            const targetDist = physics.initialGrabDist * Math.pow(depthRatio, 1.2);
+                            const depthRatio =
+                                physics.initialPalmSize / pinches[0].palmSize;
+                            const targetDist =
+                                physics.initialGrabDist *
+                                Math.pow(depthRatio, 1.2);
                             const minDist = physics.maxDim * 1;
                             const maxDist = physics.maxDim * 7;
-                            const clampedDist = THREE.MathUtils.clamp(targetDist, minDist, maxDist);
-                            physics.grabDist = THREE.MathUtils.lerp(physics.grabDist, clampedDist, 0.15);
+                            const clampedDist = THREE.MathUtils.clamp(
+                                targetDist,
+                                minDist,
+                                maxDist,
+                            );
+                            physics.grabDist = THREE.MathUtils.lerp(
+                                physics.grabDist,
+                                clampedDist,
+                                0.15,
+                            );
                         } else {
                             centerNDC.set(
                                 (pinches[0].ndc.x + pinches[1].ndc.x) / 2,
@@ -519,29 +630,67 @@ export default function App() {
 
                         const fingerPoint = raycaster.ray.origin
                             .clone()
-                            .addScaledVector(raycaster.ray.direction, physics.grabDist);
+                            .addScaledVector(
+                                raycaster.ray.direction,
+                                physics.grabDist,
+                            );
                         const target = fingerPoint.add(physics.grabOffset);
 
-                        physics.vel.copy(target).sub(model.position).multiplyScalar(0.15);
+                        physics.vel
+                            .copy(target)
+                            .sub(model.position)
+                            .multiplyScalar(0.15);
                         model.position.lerp(target, 0.15);
 
                         if (pinches.length === 2) {
                             const p1Ray = new THREE.Raycaster();
-                            p1Ray.setFromCamera(new THREE.Vector2(pinches[0].ndc.x, pinches[0].ndc.y), camera);
-                            const p1 = p1Ray.ray.at(physics.grabDist, new THREE.Vector3());
-                            p1.z += (pinches[0].palmSize - 0.15) * physics.maxDim * 5.0;
+                            p1Ray.setFromCamera(
+                                new THREE.Vector2(
+                                    pinches[0].ndc.x,
+                                    pinches[0].ndc.y,
+                                ),
+                                camera,
+                            );
+                            const p1 = p1Ray.ray.at(
+                                physics.grabDist,
+                                new THREE.Vector3(),
+                            );
+                            p1.z +=
+                                (pinches[0].palmSize - 0.15) *
+                                physics.maxDim *
+                                5.0;
 
                             const p2Ray = new THREE.Raycaster();
-                            p2Ray.setFromCamera(new THREE.Vector2(pinches[1].ndc.x, pinches[1].ndc.y), camera);
-                            const p2 = p2Ray.ray.at(physics.grabDist, new THREE.Vector3());
-                            p2.z += (pinches[1].palmSize - 0.15) * physics.maxDim * 5.0;
+                            p2Ray.setFromCamera(
+                                new THREE.Vector2(
+                                    pinches[1].ndc.x,
+                                    pinches[1].ndc.y,
+                                ),
+                                camera,
+                            );
+                            const p2 = p2Ray.ray.at(
+                                physics.grabDist,
+                                new THREE.Vector3(),
+                            );
+                            p2.z +=
+                                (pinches[1].palmSize - 0.15) *
+                                physics.maxDim *
+                                5.0;
 
-                            const currentVec = new THREE.Vector3().subVectors(p2, p1).normalize();
+                            const currentVec = new THREE.Vector3()
+                                .subVectors(p2, p1)
+                                .normalize();
 
                             // 스트레치: 초기 거리 대비 현재 거리 비율로 targetScale 결정
                             if (physics.initialPinchDist > 0) {
-                                const ratio = p1.distanceTo(p2) / physics.initialPinchDist;
-                                physics.targetScale = THREE.MathUtils.clamp(ratio, 0.5, 3.0);
+                                const ratio =
+                                    p1.distanceTo(p2) /
+                                    physics.initialPinchDist;
+                                physics.targetScale = THREE.MathUtils.clamp(
+                                    ratio,
+                                    0.5,
+                                    3.0,
+                                );
                             }
 
                             if (!physics.smoothedVec) {
@@ -552,18 +701,29 @@ export default function App() {
                                 const sv = physics.smoothedVec;
                                 const lv = physics.lastVec!;
                                 sv.lerp(currentVec, 0.15).normalize();
-                                const q = new THREE.Quaternion().setFromUnitVectors(lv, sv);
+                                const q =
+                                    new THREE.Quaternion().setFromUnitVectors(
+                                        lv,
+                                        sv,
+                                    );
 
                                 const axis = new THREE.Vector3(q.x, q.y, q.z);
                                 const sinHalfAngle = axis.length();
 
                                 if (sinHalfAngle > 0.0001) {
                                     axis.divideScalar(sinHalfAngle);
-                                    const angle = 2 * Math.atan2(sinHalfAngle, q.w) * 2.0;
+                                    const angle =
+                                        2 * Math.atan2(sinHalfAngle, q.w) * rotationSpeedRef.current;
                                     model.quaternion.premultiply(
-                                        new THREE.Quaternion().setFromAxisAngle(axis, angle),
+                                        new THREE.Quaternion().setFromAxisAngle(
+                                            axis,
+                                            angle,
+                                        ),
                                     );
-                                    physics.angularVel.lerp(axis.clone().multiplyScalar(angle), 0.3);
+                                    physics.angularVel.lerp(
+                                        axis.clone().multiplyScalar(angle),
+                                        0.3,
+                                    );
                                 } else {
                                     physics.angularVel.multiplyScalar(0.8);
                                 }
@@ -576,9 +736,14 @@ export default function App() {
 
                             if (physics.angularVel.lengthSq() > 0.000001) {
                                 const angle = physics.angularVel.length();
-                                const axis = physics.angularVel.clone().normalize();
+                                const axis = physics.angularVel
+                                    .clone()
+                                    .normalize();
                                 model.quaternion.premultiply(
-                                    new THREE.Quaternion().setFromAxisAngle(axis, angle),
+                                    new THREE.Quaternion().setFromAxisAngle(
+                                        axis,
+                                        angle,
+                                    ),
                                 );
                                 physics.angularVel.multiplyScalar(0.92);
                             }
@@ -592,28 +757,43 @@ export default function App() {
                             const angle = physics.angularVel.length();
                             const axis = physics.angularVel.clone().normalize();
                             model.quaternion.premultiply(
-                                new THREE.Quaternion().setFromAxisAngle(axis, angle),
+                                new THREE.Quaternion().setFromAxisAngle(
+                                    axis,
+                                    angle,
+                                ),
                             );
                             physics.angularVel.multiplyScalar(0.96);
                         }
 
                         physics.vel.y += Math.sin(physics.time * 1.2) * 0.02;
-                        physics.vel.x += Math.sin(physics.time * 0.7 + 1.2) * 0.01;
-                        physics.vel.z += Math.sin(physics.time * 0.9 + 0.5) * 0.01;
+                        physics.vel.x +=
+                            Math.sin(physics.time * 0.7 + 1.2) * 0.01;
+                        physics.vel.z +=
+                            Math.sin(physics.time * 0.9 + 0.5) * 0.01;
                         physics.vel.multiplyScalar(0.95);
                         model.position.add(physics.vel);
 
-                        physics.angularVel.x += Math.sin(physics.time * 0.8) * 0.00005;
-                        physics.angularVel.y += Math.sin(physics.time * 0.5 + 1.0) * 0.00008;
-                        physics.angularVel.z += Math.sin(physics.time * 1.1 + 0.5) * 0.00004;
+                        physics.angularVel.x +=
+                            Math.sin(physics.time * 0.8) * 0.00005;
+                        physics.angularVel.y +=
+                            Math.sin(physics.time * 0.5 + 1.0) * 0.00008;
+                        physics.angularVel.z +=
+                            Math.sin(physics.time * 1.1 + 0.5) * 0.00004;
                     }
                 }
 
                 accumulator -= timeStep;
             }
 
-            // 쫀득한 탄성 복원: currentScale → targetScale lerp
-            physics.currentScale = THREE.MathUtils.lerp(physics.currentScale, physics.targetScale, 0.1);
+            const stiffness = stiffnessRef.current;
+            const damping = 0.7;
+            const scaleAccel =
+                (physics.targetScale - physics.currentScale) * stiffness;
+            physics.scaleVel += scaleAccel; // 가속도를 속도에 더함
+            physics.scaleVel *= damping; // 마찰력을 곱해서 서서히 멈추게 함
+
+            physics.currentScale += physics.scaleVel; // 최종 속도를 현재 스케일에 적용
+
             const sw = stretchWrapperRef.current;
             if (sw) {
                 const s = physics.currentScale;
@@ -654,6 +834,7 @@ export default function App() {
             <video ref={videoRef} className="video" muted playsInline />
             <canvas ref={canvasRef} className="canvas" />
             <canvas ref={threeRef} className="three-canvas" />
+            <div className="bottom-panels">
             <div className="toolbar">
                 <div className="toolbar-instructions">
                     <div className="instruction-item">
@@ -662,13 +843,70 @@ export default function App() {
                     </div>
                     <div className="instruction-item">
                         <span className="instruction-icon">✌🏻</span>
-                        <span>두 손으로 꼬집어서 회전하기</span>
+                        <span>두 손으로 꼬집어서 회전 & 늘리기</span>
                     </div>
                 </div>
                 <div className="toolbar-divider" />
-                <button className="reset-button" onClick={() => resetRef.current?.()}>
+                <button
+                    className="reset-button"
+                    onClick={() => resetRef.current?.()}
+                >
                     초기화
                 </button>
+            </div>
+            <div className="settings-panel">
+                <div className="slider-row">
+                    <span className="slider-label">꼬집기 인식</span>
+                    <input
+                        type="range"
+                        className="aesthetic-slider"
+                        min={0.3}
+                        max={0.9}
+                        step={0.01}
+                        value={pinchThreshold}
+                        onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            pinchThresholdRef.current = v;
+                            setPinchThreshold(v);
+                        }}
+                        style={{ "--pct": `${((pinchThreshold - 0.3) / 0.6) * 100}%` } as React.CSSProperties}
+                    />
+                </div>
+                <div className="slider-row">
+                    <span className="slider-label">회전 속도</span>
+                    <input
+                        type="range"
+                        className="aesthetic-slider"
+                        min={1.0}
+                        max={4.0}
+                        step={0.05}
+                        value={rotationSpeed}
+                        onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            rotationSpeedRef.current = v;
+                            setRotationSpeed(v);
+                        }}
+                        style={{ "--pct": `${((rotationSpeed - 1.0) / 3.0) * 100}%` } as React.CSSProperties}
+                    />
+                </div>
+                <div className="slider-row">
+                    <span className="slider-label">쫀쫀함</span>
+                    <input
+                        type="range"
+                        className="aesthetic-slider"
+                        min={0.05}
+                        max={0.45}
+                        step={0.005}
+                        value={stiffness}
+                        onChange={(e) => {
+                            const v = parseFloat(e.target.value);
+                            stiffnessRef.current = v;
+                            setStiffness(v);
+                        }}
+                        style={{ "--pct": `${((stiffness - 0.05) / 0.4) * 100}%` } as React.CSSProperties}
+                    />
+                </div>
+            </div>
             </div>
         </div>
     );
