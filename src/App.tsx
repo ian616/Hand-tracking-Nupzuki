@@ -5,7 +5,6 @@ import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import "./App.css";
 
-
 interface Landmark {
     x: number;
     y: number;
@@ -251,7 +250,8 @@ export default function App() {
                                 thumb.z - index.z,
                             );
                             const isPinching =
-                                pinchDist / palmSize < pinchThresholdRef.current;
+                                pinchDist / palmSize <
+                                pinchThresholdRef.current;
 
                             if (isPinching) {
                                 pinches.push({
@@ -713,7 +713,9 @@ export default function App() {
                                 if (sinHalfAngle > 0.0001) {
                                     axis.divideScalar(sinHalfAngle);
                                     const angle =
-                                        2 * Math.atan2(sinHalfAngle, q.w) * rotationSpeedRef.current;
+                                        2 *
+                                        Math.atan2(sinHalfAngle, q.w) *
+                                        rotationSpeedRef.current;
                                     model.quaternion.premultiply(
                                         new THREE.Quaternion().setFromAxisAngle(
                                             axis,
@@ -731,6 +733,10 @@ export default function App() {
                                 physics.lastVec = sv.clone();
                             }
                         } else {
+                            physics.smoothedVec = null;
+                            physics.lastVec = null;
+
+                            physics.targetScale = 1;
                             physics.smoothedVec = null;
                             physics.lastVec = null;
 
@@ -835,78 +841,90 @@ export default function App() {
             <canvas ref={canvasRef} className="canvas" />
             <canvas ref={threeRef} className="three-canvas" />
             <div className="bottom-panels">
-            <div className="toolbar">
-                <div className="toolbar-instructions">
-                    <div className="instruction-item">
-                        <span className="instruction-icon">☝🏻</span>
-                        <span>한 손으로 꼬집어서 움직이기</span>
+                <div className="toolbar">
+                    <div className="toolbar-instructions">
+                        <div className="instruction-item">
+                            <span className="instruction-icon">☝🏻</span>
+                            <span>한 손으로 꼬집어서 움직이기</span>
+                        </div>
+                        <div className="instruction-item">
+                            <span className="instruction-icon">✌🏻</span>
+                            <span>두 손으로 꼬집어서 회전 & 늘리기</span>
+                        </div>
                     </div>
-                    <div className="instruction-item">
-                        <span className="instruction-icon">✌🏻</span>
-                        <span>두 손으로 꼬집어서 회전 & 늘리기</span>
+                    <div className="toolbar-divider" />
+                    <button
+                        className="reset-button"
+                        onClick={() => resetRef.current?.()}
+                    >
+                        초기화
+                    </button>
+                </div>
+                <div className="settings-panel">
+                    <div className="slider-row">
+                        <span className="slider-label">꼬집기 인식</span>
+                        <input
+                            type="range"
+                            className="aesthetic-slider"
+                            min={0.3}
+                            max={0.9}
+                            step={0.01}
+                            value={pinchThreshold}
+                            onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                pinchThresholdRef.current = v;
+                                setPinchThreshold(v);
+                            }}
+                            style={
+                                {
+                                    "--pct": `${((pinchThreshold - 0.3) / 0.6) * 100}%`,
+                                } as React.CSSProperties
+                            }
+                        />
+                    </div>
+                    <div className="slider-row">
+                        <span className="slider-label">회전 속도</span>
+                        <input
+                            type="range"
+                            className="aesthetic-slider"
+                            min={1.0}
+                            max={4.0}
+                            step={0.05}
+                            value={rotationSpeed}
+                            onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                rotationSpeedRef.current = v;
+                                setRotationSpeed(v);
+                            }}
+                            style={
+                                {
+                                    "--pct": `${((rotationSpeed - 1.0) / 3.0) * 100}%`,
+                                } as React.CSSProperties
+                            }
+                        />
+                    </div>
+                    <div className="slider-row">
+                        <span className="slider-label">쫀쫀함</span>
+                        <input
+                            type="range"
+                            className="aesthetic-slider"
+                            min={0.05}
+                            max={0.45}
+                            step={0.005}
+                            value={stiffness}
+                            onChange={(e) => {
+                                const v = parseFloat(e.target.value);
+                                stiffnessRef.current = v;
+                                setStiffness(v);
+                            }}
+                            style={
+                                {
+                                    "--pct": `${((stiffness - 0.05) / 0.4) * 100}%`,
+                                } as React.CSSProperties
+                            }
+                        />
                     </div>
                 </div>
-                <div className="toolbar-divider" />
-                <button
-                    className="reset-button"
-                    onClick={() => resetRef.current?.()}
-                >
-                    초기화
-                </button>
-            </div>
-            <div className="settings-panel">
-                <div className="slider-row">
-                    <span className="slider-label">꼬집기 인식</span>
-                    <input
-                        type="range"
-                        className="aesthetic-slider"
-                        min={0.3}
-                        max={0.9}
-                        step={0.01}
-                        value={pinchThreshold}
-                        onChange={(e) => {
-                            const v = parseFloat(e.target.value);
-                            pinchThresholdRef.current = v;
-                            setPinchThreshold(v);
-                        }}
-                        style={{ "--pct": `${((pinchThreshold - 0.3) / 0.6) * 100}%` } as React.CSSProperties}
-                    />
-                </div>
-                <div className="slider-row">
-                    <span className="slider-label">회전 속도</span>
-                    <input
-                        type="range"
-                        className="aesthetic-slider"
-                        min={1.0}
-                        max={4.0}
-                        step={0.05}
-                        value={rotationSpeed}
-                        onChange={(e) => {
-                            const v = parseFloat(e.target.value);
-                            rotationSpeedRef.current = v;
-                            setRotationSpeed(v);
-                        }}
-                        style={{ "--pct": `${((rotationSpeed - 1.0) / 3.0) * 100}%` } as React.CSSProperties}
-                    />
-                </div>
-                <div className="slider-row">
-                    <span className="slider-label">쫀쫀함</span>
-                    <input
-                        type="range"
-                        className="aesthetic-slider"
-                        min={0.05}
-                        max={0.45}
-                        step={0.005}
-                        value={stiffness}
-                        onChange={(e) => {
-                            const v = parseFloat(e.target.value);
-                            stiffnessRef.current = v;
-                            setStiffness(v);
-                        }}
-                        style={{ "--pct": `${((stiffness - 0.05) / 0.4) * 100}%` } as React.CSSProperties}
-                    />
-                </div>
-            </div>
             </div>
         </div>
     );
