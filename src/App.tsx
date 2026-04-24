@@ -173,7 +173,7 @@ export default function App() {
 
     const [status, setStatus] = useState("초기화 중...");
     const [pinchThreshold, setPinchThreshold] = useState(0.6);
-    const [rotationSpeed, setRotationSpeed] = useState(2.0);
+    const [rotationSpeed, setRotationSpeed] = useState(3.0);
     const [stiffness, setStiffness] = useState(0.2);
 
     // ── MediaPipe 핸드트래킹 ─────────────────────────────────────
@@ -497,7 +497,7 @@ export default function App() {
                                 const distToRay = Math.sqrt(
                                     raycaster.ray.distanceSqToPoint(centerPos),
                                 );
-                                const GRAB_RADIUS = physics.maxDim * 1;
+                                const GRAB_RADIUS = physics.maxDim * 0.8;
                                 if (distToRay < GRAB_RADIUS) {
                                     physics.initialGrabDist =
                                         camera.position.distanceTo(centerPos);
