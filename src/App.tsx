@@ -519,20 +519,6 @@ export default function App() {
                                 physics.initialPalmSize = pinches[0].palmSize;
                                 physics.wasGrabbing = true;
                                 physics.activePinchesCount = pinches.length;
-
-                                if (pinches.length !== 2) {
-                                    physics.targetScale = 1;
-                                    physics.smoothedVec = null;
-                                    physics.lastVec = null;
-                                    const sw = stretchWrapperRef.current;
-                                    if (sw) {
-                                        sw.quaternion.identity();
-                                        if (sw.children.length > 0) {
-                                            sw.children[0].quaternion.identity();
-                                        }
-                                    }
-                                }
-
                                 const grabPoint = raycaster.ray.origin
                                     .clone()
                                     .addScaledVector(
