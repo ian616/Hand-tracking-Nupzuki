@@ -372,6 +372,9 @@ export default function App() {
                     outerGroup.quaternion.identity();
                     stretchWrapper.quaternion.identity();
                     stretchWrapper.scale.set(1, 1, 1);
+                    if (stretchWrapper.children.length > 0) {
+                        stretchWrapper.children[0].quaternion.identity();
+                    }
                     physics.vel.set(0, 0, 0);
                     physics.angularVel.set(0, 0, 0);
                     physics.smoothedVec = null;
@@ -470,12 +473,14 @@ export default function App() {
                                     if (sw) {
                                         const worldAxis = new THREE.Vector3().subVectors(p2Init, p1Init).normalize();
                                         const localAxis = worldAxis.applyQuaternion(model.quaternion.clone().invert());
-                                        sw.quaternion.copy(
-                                            new THREE.Quaternion().setFromUnitVectors(
-                                                new THREE.Vector3(1, 0, 0),
-                                                localAxis,
-                                            ),
+                                        const stretchQuat = new THREE.Quaternion().setFromUnitVectors(
+                                            new THREE.Vector3(1, 0, 0),
+                                            localAxis,
                                         );
+                                        sw.quaternion.copy(stretchQuat);
+                                        if (sw.children.length > 0) {
+                                            sw.children[0].quaternion.copy(stretchQuat.clone().invert());
+                                        }
                                     }
                                 }
                             }
