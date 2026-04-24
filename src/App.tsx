@@ -24,6 +24,9 @@ interface Physics {
     grabDist: number;
     initialGrabDist: number;
     initialPalmSize: number;
+    initialPinchDist: number;
+    currentScale: number;
+    targetScale: number;
     wasGrabbing: boolean;
     activePinchesCount: number;
     grabOffset: THREE.Vector3;
@@ -147,6 +150,7 @@ export default function App() {
     const animRef = useRef(0);
     const gestureRef = useRef<{ pinches: Pinch[] }>({ pinches: [] });
     const modelRef = useRef<THREE.Group | null>(null);
+    const stretchWrapperRef = useRef<THREE.Group | null>(null);
     const mixerRef = useRef<THREE.AnimationMixer | null>(null);
     const actionRef = useRef<THREE.AnimationAction | null>(null);
     const resetRef = useRef<(() => void) | null>(null);
@@ -299,6 +303,9 @@ export default function App() {
             grabDist: 300,
             initialGrabDist: 300,
             initialPalmSize: 0,
+            initialPinchDist: 0,
+            currentScale: 1,
+            targetScale: 1,
             wasGrabbing: false,
             activePinchesCount: 0,
             grabOffset: new THREE.Vector3(),
@@ -345,8 +352,13 @@ export default function App() {
                 const center = box.getCenter(new THREE.Vector3());
 
                 fbx.position.sub(center);
-                scene.add(fbx);
-                modelRef.current = fbx;
+                const stretchWrapper = new THREE.Group();
+                const outerGroup = new THREE.Group();
+                stretchWrapper.add(fbx);
+                outerGroup.add(stretchWrapper);
+                scene.add(outerGroup);
+                modelRef.current = outerGroup;
+                stretchWrapperRef.current = stretchWrapper;
 
                 const maxDim = Math.max(size.x, size.y, size.z);
                 physics.maxDim = maxDim;
@@ -356,12 +368,16 @@ export default function App() {
                 controls.update();
 
                 resetRef.current = () => {
-                    fbx.position.set(0, 0, 0);
-                    fbx.quaternion.identity();
+                    outerGroup.position.set(0, 0, 0);
+                    outerGroup.quaternion.identity();
+                    stretchWrapper.quaternion.identity();
+                    stretchWrapper.scale.set(1, 1, 1);
                     physics.vel.set(0, 0, 0);
                     physics.angularVel.set(0, 0, 0);
                     physics.smoothedVec = null;
                     physics.lastVec = null;
+                    physics.currentScale = 1;
+                    physics.targetScale = 1;
                     camera.position.set(0, 0, maxDim * 2);
                     controls.target.set(0, 0, 0);
                     controls.update();
@@ -439,6 +455,16 @@ export default function App() {
                                     .clone()
                                     .addScaledVector(raycaster.ray.direction, physics.grabDist);
                                 physics.grabOffset.subVectors(model.position, grabPoint);
+
+                                if (pinches.length === 2) {
+                                    const r1 = new THREE.Raycaster();
+                                    r1.setFromCamera(new THREE.Vector2(pinches[0].ndc.x, pinches[0].ndc.y), camera);
+                                    const r2 = new THREE.Raycaster();
+                                    r2.setFromCamera(new THREE.Vector2(pinches[1].ndc.x, pinches[1].ndc.y), camera);
+                                    physics.initialPinchDist = r1.ray
+                                        .at(physics.grabDist, new THREE.Vector3())
+                                        .distanceTo(r2.ray.at(physics.grabDist, new THREE.Vector3()));
+                                }
                             }
                         }
                     } else {
@@ -447,6 +473,7 @@ export default function App() {
                         }
                         physics.wasGrabbing = false;
                         physics.activePinchesCount = 0;
+                        physics.targetScale = 1;
                     }
 
                     // --- [2] 이동 및 회전 로직 ---
@@ -492,6 +519,26 @@ export default function App() {
                             p2.z += (pinches[1].palmSize - 0.15) * physics.maxDim * 5.0;
 
                             const currentVec = new THREE.Vector3().subVectors(p2, p1).normalize();
+
+                            // 스트레치: 초기 거리 대비 현재 거리 비율로 targetScale 결정
+                            if (physics.initialPinchDist > 0) {
+                                const ratio = p1.distanceTo(p2) / physics.initialPinchDist;
+                                physics.targetScale = THREE.MathUtils.clamp(ratio, 0.5, 3.0);
+                            }
+
+                            // stretchWrapper를 현재 당기는 방향(currentVec)으로 정렬
+                            const sw = stretchWrapperRef.current;
+                            if (sw) {
+                                const localAxis = currentVec.clone()
+                                    .applyQuaternion(model.quaternion.clone().invert())
+                                    .normalize();
+                                sw.quaternion.copy(
+                                    new THREE.Quaternion().setFromUnitVectors(
+                                        new THREE.Vector3(1, 0, 0),
+                                        localAxis,
+                                    ),
+                                );
+                            }
 
                             if (!physics.smoothedVec) {
                                 physics.smoothedVec = currentVec.clone();
@@ -559,6 +606,15 @@ export default function App() {
                 }
 
                 accumulator -= timeStep;
+            }
+
+            // 쫀득한 탄성 복원: currentScale → targetScale lerp
+            physics.currentScale = THREE.MathUtils.lerp(physics.currentScale, physics.targetScale, 0.1);
+            const sw = stretchWrapperRef.current;
+            if (sw) {
+                const s = physics.currentScale;
+                const inv = 1.0 / Math.sqrt(Math.max(s, 0.01));
+                sw.scale.set(s, inv, inv);
             }
 
             controls.update();
