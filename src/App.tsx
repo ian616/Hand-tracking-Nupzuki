@@ -341,6 +341,7 @@ export default function App() {
 
         const controls = new OrbitControls(camera, canvas);
         controls.enableDamping = true;
+        controls.enabled = false;
 
         const physics: Physics = {
             vel: new THREE.Vector3(),
@@ -596,8 +597,6 @@ export default function App() {
 
                     // --- [2] 이동 및 회전 로직 ---
                     if (physics.wasGrabbing) {
-                        controls.enabled = false;
-
                         const centerNDC = new THREE.Vector2();
                         if (pinches.length === 1) {
                             centerNDC.set(pinches[0].ndc.x, pinches[0].ndc.y);
@@ -755,7 +754,6 @@ export default function App() {
                             }
                         }
                     } else {
-                        controls.enabled = true;
                         physics.smoothedVec = null;
                         physics.lastVec = null;
 
