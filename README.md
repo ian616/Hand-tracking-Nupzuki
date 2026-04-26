@@ -2,6 +2,10 @@
 
 A browser-based AR toy where you grab, spin, stretch, and fling a 3D character using nothing but your hands and a webcam. No controllers, no headset — just fingers.
 
+
+https://github.com/user-attachments/assets/af27c1d5-ac46-4fa4-9c90-8e3d607ad71b
+
+
 ## What it does
 
 Your webcam feed becomes the background. MediaPipe tracks your hands in real time, and when you pinch your fingers together near the character, you can mess with it.
